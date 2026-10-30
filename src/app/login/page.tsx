@@ -9,62 +9,91 @@ export default async function LoginPage({
   const params = await searchParams;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-2xl font-semibold text-neutral-900">
-          Iniciar sesión
-        </h1>
-
-        {params.message && (
-          <p className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-            {params.message}
+    <div className="flex min-h-screen">
+      {/* Panel izquierdo: marca */}
+      <aside className="relative hidden w-[42%] flex-col justify-between bg-stamp-dark px-12 py-12 text-paper lg:flex">
+        <p className="text-lg font-semibold tracking-tight">LS Nexus</p>
+        <div className="max-w-sm">
+          <p className="text-3xl font-semibold leading-snug">
+            Un registro de lo que tienes, lo que debes y lo que viene.
           </p>
-        )}
-        {params.error && (
-          <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {params.error}
+          <p className="mt-4 text-sm text-paper/70">
+            Inversiones, pagos y vencimientos, en un solo libro.
           </p>
-        )}
+        </div>
+        <p className="text-xs text-paper/50">Cuenta personal · acceso privado</p>
+      </aside>
 
-        <form action={login} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-neutral-700">
-              Correo
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
-            />
+      {/* Panel derecho: formulario */}
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 lg:hidden">
+            <p className="text-lg font-semibold text-ink">LS Nexus</p>
           </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-neutral-700">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-          >
-            Entrar
-          </button>
-        </form>
 
-        <p className="mt-6 text-center text-sm text-neutral-600">
-          ¿No tienes cuenta?{" "}
-          <Link href="/signup" className="font-medium text-neutral-900 underline">
-            Regístrate
-          </Link>
-        </p>
+          <h1 className="text-2xl font-semibold text-ink">Entrar</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Ingresa con tu correo y contraseña.
+          </p>
+
+          <div aria-live="polite">
+            {params.message && (
+              <p className="mt-6 rounded border border-stamp/20 bg-stamp-soft px-3 py-2 text-sm text-stamp-dark">
+                {params.message}
+              </p>
+            )}
+            {params.error && (
+              <p className="mt-6 rounded border border-mustard/30 bg-mustard-soft px-3 py-2 text-sm text-mustard">
+                {params.error}
+              </p>
+            )}
+          </div>
+
+          <form action={login} className="mt-8 space-y-5">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-ink">
+                Correo
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                spellCheck={false}
+                required
+                placeholder="tucorreo@ejemplo.com"
+                className="mt-1.5 w-full rounded border border-line bg-paper-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/50 outline-none transition focus-visible:border-stamp focus-visible:ring-2 focus-visible:ring-stamp/15"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-ink">
+                Contraseña
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                placeholder="••••••••"
+                className="mt-1.5 w-full rounded border border-line bg-paper-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/50 outline-none transition focus-visible:border-stamp focus-visible:ring-2 focus-visible:ring-stamp/15"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full rounded bg-stamp-dark px-4 py-2.5 text-sm font-medium text-paper transition hover:bg-stamp"
+            >
+              Entrar
+            </button>
+          </form>
+
+          <p className="mt-8 text-center text-sm text-ink-soft">
+            ¿No tienes cuenta?{" "}
+            <Link href="/signup" className="font-medium text-stamp-dark underline underline-offset-4">
+              Regístrate
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

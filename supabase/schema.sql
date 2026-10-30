@@ -10,6 +10,14 @@ create table if not exists investments (
   amount numeric(14, 2) not null,
   currency currency_code not null default 'COP',
   notes text,
+  -- Ver supabase/migrations/001_investment_details.sql
+  category text not null default 'otro' check (category in ('vivienda', 'fondo', 'acciones', 'otro')),
+  platform text,
+  project_name text,
+  credit_amount numeric(14, 2),
+  interest_rate numeric(6, 3),
+  credit_term_months integer,
+  payment_day integer check (payment_day between 1 and 31),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
