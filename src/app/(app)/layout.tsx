@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutGrid, Wallet, Receipt, LogOut } from "lucide-react";
+import { LayoutGrid, Wallet, Receipt, Banknote, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./dashboard/actions";
 
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumen", icon: LayoutGrid },
   { href: "/inversiones", label: "Inversiones", icon: Wallet },
   { href: "/pagos", label: "Pagos", icon: Receipt },
+  { href: "/ingresos", label: "Ingresos y gastos", icon: Banknote },
 ];
 
 export default async function AppLayout({

@@ -56,3 +56,5 @@ create policy "Los usuarios actualizan sus propios pagos"
   on recurring_payments for update using (auth.uid() = user_id);
 create policy "Los usuarios eliminan sus propios pagos"
   on recurring_payments for delete using (auth.uid() = user_id);
+
+-- Ingresos y gastos mensuales: ver supabase/migrations/002_cash_flows.sql
