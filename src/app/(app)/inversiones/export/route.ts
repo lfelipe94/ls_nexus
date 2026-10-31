@@ -5,7 +5,7 @@ export async function GET() {
   const supabase = await createClient();
   const { data: investments } = await supabase
     .from("investments")
-    .select("name, amount, currency, notes, created_at, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day")
+    .select("name, amount, currency, notes, created_at, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day, ownership_pct")
     .order("created_at", { ascending: false });
 
   const csv = toCsv(
@@ -13,6 +13,7 @@ export async function GET() {
       nombre: inv.name,
       monto: inv.amount,
       moneda: inv.currency,
+      porcentaje: inv.ownership_pct,
       tipo: inv.category,
       plataforma: inv.platform,
       proyecto: inv.project_name,

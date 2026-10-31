@@ -58,3 +58,6 @@ create policy "Los usuarios eliminan sus propios pagos"
   on recurring_payments for delete using (auth.uid() = user_id);
 
 -- Ingresos y gastos mensuales: ver supabase/migrations/002_cash_flows.sql
+-- Detalle (fecha, recurrencia, categoría, apartamento): ver supabase/migrations/003_cash_flows_detail.sql
+-- Porcentaje de propiedad: ver supabase/migrations/004_ownership_pct.sql
+-- CDT, valor actual, precio de compra y fechas: ver supabase/migrations/005_investment_types.sql

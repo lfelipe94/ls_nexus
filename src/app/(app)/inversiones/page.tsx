@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { InvestmentFields } from "@/components/InvestmentFields";
-import { categoryLabel, monthlyPayment, nextPaymentDate } from "@/lib/investments";
+import { appreciation, categoryLabel, currentValue, monthlyPayment, myShare, nextPaymentDate } from "@/lib/investments";
 import { createInvestment, deleteInvestment } from "./actions";
 
 type Inv = Parameters<typeof monthlyPayment>[0] & {
@@ -29,6 +29,87 @@ function CreditSummary({ inv }: { inv: Inv }) {
   );
 }
 
+type Investment = Inv & {
+  id: string;
+  name: string;
+  amount: number | string;
+  category: string | null;
+  platform: string | null;
+  project_name: string | null;
+  notes: string | null;
+  ownership_pct: number | string | null;
+  current_value: number | string | null;
+  purchase_price: number | string | null;
+  start_date: string | null;
+  purchase_date: string | null;
+  maturity_date: string | null;
+};
+
+function Row({ inv }: { inv: Investment }) {
+  const mine = myShare(inv);
+  const today = inv.category === "vivienda" ? null : currentValue(mine);
+  const growth = inv.category === "vivienda" ? appreciation(inv) : null;
+  return (
+  <li className="flex items-center justify-between gap-4 px-5 py-4">
+    <div className="min-w-0 flex-1">
+      <Link href={`/inversiones/${inv.id}`} className="truncate font-medium text-ink hover:text-stamp-dark hover:underline">
+        {inv.name}
+      </Link>
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-ink-soft">
+        <span className="rounded-full bg-stamp-soft px-2 py-0.5 text-xs font-medium text-stamp-dark">
+          {categoryLabel(inv.category)}
+        </span>
+        {inv.platform && <span>{inv.platform}</span>}
+        {inv.project_name && <span>· {inv.project_name}</span>}
+      </p>
+      {inv.category === "vivienda" && <CreditSummary inv={myShare(inv)} />}
+      {growth && (
+        <p className="tabular mt-1 text-xs text-ink-soft">
+          Valorización {growth.total >= 0 ? "+" : ""}
+          {formatMoney(currentValue(mine) - Number(mine.purchase_price), inv.currency)} ({(growth.total * 100).toFixed(1)} %
+          {growth.yearly != null && ` · ${(growth.yearly * 100).toFixed(1)} % anual`}) · {growth.years} años, {growth.months} meses
+        </p>
+      )}
+      {today !== null && Math.abs(today - mine.amount) >= 1 && (
+        <p className="tabular mt-1 text-xs text-ink-soft">
+          Hoy ≈ {formatMoney(today, inv.currency)} ({today >= mine.amount ? "+" : ""}
+          {formatMoney(today - mine.amount, inv.currency)})
+        </p>
+      )}
+      {inv.notes && <p className="truncate text-sm text-ink-soft">{inv.notes}</p>}
+    </div>
+    <div className="flex shrink-0 items-center gap-3">
+      <span className="tabular text-base font-semibold text-ink">
+        {formatMoney(myShare(inv).amount, inv.currency)}
+        {Number(inv.ownership_pct) < 100 && (
+          <span className="block text-right text-xs font-normal text-ink-soft">
+            {Number(inv.ownership_pct)}% de {formatMoney(Number(inv.amount), inv.currency)}
+          </span>
+        )}
+      </span>
+      <Link
+        href={`/inversiones/${inv.id}/editar`}
+        aria-label="Editar inversión"
+        className="rounded p-1.5 text-ink-soft/60 transition hover:bg-stamp-soft hover:text-stamp-dark"
+      >
+        <Pencil className="h-4 w-4" aria-hidden="true" />
+      </Link>
+      <form
+        action={async () => {
+          "use server";
+          await deleteInvestment(inv.id);
+        }}
+      >
+        <ConfirmDeleteButton
+          label="Eliminar inversión"
+          confirmMessage={`¿Eliminar la inversión "${inv.name}"? Esta acción no se puede deshacer.`}
+        />
+      </form>
+    </div>
+  </li>
+  );
+}
+
 export default async function InversionesPage({
   searchParams,
 }: {
@@ -48,12 +129,16 @@ export default async function InversionesPage({
 
   const { data: investments } = await query;
 
-  // Totales por moneda (no se pueden sumar monedas distintas entre sí)
+  const all = (investments ?? []) as Investment[];
+  const financial = all.filter((inv) => inv.category !== "vivienda");
+  const homes = all.filter((inv) => inv.category === "vivienda");
+
+  // Totales por moneda (no se pueden sumar monedas distintas entre sí); la vivienda va aparte.
   const totalsByCurrency = new Map<string, number>();
-  for (const inv of investments ?? []) {
+  for (const inv of financial) {
     totalsByCurrency.set(
       inv.currency,
-      (totalsByCurrency.get(inv.currency) ?? 0) + Number(inv.amount)
+      (totalsByCurrency.get(inv.currency) ?? 0) + myShare(inv).amount
     );
   }
 
@@ -84,7 +169,7 @@ export default async function InversionesPage({
               className="card px-6 py-4"
             >
               <p className="text-xs font-medium uppercase text-ink-soft">
-                Total en {currency}
+                Invertido en {currency}
               </p>
               <p className="tabular mt-1 text-3xl font-bold tracking-tight text-ink">
                 {formatMoney(total, currency)}
@@ -126,54 +211,35 @@ export default async function InversionesPage({
         </button>
       </form>
 
-      {!investments || investments.length === 0 ? (
+      {all.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line px-5 py-10 text-center">
           <p className="text-sm text-ink-soft">
             {q ? `No hay inversiones que coincidan con "${q}".` : "No tienes inversiones registradas."}
           </p>
         </div>
       ) : (
-        <ul className="card divide-y divide-line overflow-hidden">
-          {investments.map((inv) => (
-            <li key={inv.id} className="flex items-center justify-between gap-4 px-5 py-4">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-ink">{inv.name}</p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-ink-soft">
-                  <span className="rounded-full bg-stamp-soft px-2 py-0.5 text-xs font-medium text-stamp-dark">
-                    {categoryLabel(inv.category)}
-                  </span>
-                  {inv.platform && <span>{inv.platform}</span>}
-                  {inv.project_name && <span>· {inv.project_name}</span>}
-                </p>
-                {inv.category === "vivienda" && <CreditSummary inv={inv} />}
-                {inv.notes && <p className="truncate text-sm text-ink-soft">{inv.notes}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="tabular text-base font-semibold text-ink">
-                  {formatMoney(Number(inv.amount), inv.currency)}
-                </span>
-                <Link
-                  href={`/inversiones/${inv.id}`}
-                  aria-label="Editar inversión"
-                  className="rounded p-1.5 text-ink-soft/60 transition hover:bg-stamp-soft hover:text-stamp-dark"
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                </Link>
-                <form
-                  action={async () => {
-                    "use server";
-                    await deleteInvestment(inv.id);
-                  }}
-                >
-                  <ConfirmDeleteButton
-                    label="Eliminar inversión"
-                    confirmMessage={`¿Eliminar la inversión "${inv.name}"? Esta acción no se puede deshacer.`}
-                  />
-                </form>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          {financial.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-ink">Inversiones financieras</h2>
+              <ul className="card divide-y divide-line overflow-hidden">
+                {financial.map((inv) => (
+                  <Row key={inv.id} inv={inv} />
+                ))}
+              </ul>
+            </section>
+          )}
+          {homes.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-ink">Vivienda</h2>
+              <ul className="card divide-y divide-line overflow-hidden">
+                {homes.map((inv) => (
+                  <Row key={inv.id} inv={inv} />
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

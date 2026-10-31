@@ -15,6 +15,12 @@ type Values = {
   interest_rate?: number | string | null;
   credit_term_months?: number | null;
   payment_day?: number | null;
+  ownership_pct?: number | string | null;
+  purchase_price?: number | string | null;
+  current_value?: number | string | null;
+  start_date?: string | null;
+  purchase_date?: string | null;
+  maturity_date?: string | null;
 };
 
 const input =
@@ -32,6 +38,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function InvestmentFields({ v = {} }: { v?: Values }) {
   const [category, setCategory] = useState(v.category ?? "fondo");
   const vivienda = category === "vivienda";
+  const cdt = category === "cdt";
 
   return (
     <>
@@ -66,7 +73,7 @@ export function InvestmentFields({ v = {} }: { v?: Values }) {
           className={input}
         />
       </Field>
-      <Field label={vivienda ? "Valor invertido (cuota inicial + abonos)" : "Monto"}>
+      <Field label={vivienda ? "Valor invertido total (cuota inicial + abonos)" : "Monto total"}>
         <input
           name="amount"
           type="number"
@@ -83,6 +90,48 @@ export function InvestmentFields({ v = {} }: { v?: Values }) {
           <option value="EUR">EUR</option>
         </select>
       </Field>
+      <Field label="Mi porcentaje de la inversión (%)">
+        <input
+          name="ownership_pct"
+          type="number"
+          step="0.01"
+          min={0.01}
+          max={100}
+          required
+          defaultValue={v.ownership_pct ?? 100}
+          className={`tabular ${input}`}
+        />
+      </Field>
+      {!cdt && (
+        <Field label={vivienda ? "Valor hoy del inmueble (total)" : "Valor actual (opcional)"}>
+          <input
+            name="current_value"
+            type="number"
+            step="0.01"
+            defaultValue={v.current_value ?? ""}
+            className={`tabular ${input}`}
+          />
+        </Field>
+      )}
+      {cdt && (
+        <>
+          <Field label="Tasa E.A. (%)">
+            <input
+              name="interest_rate"
+              type="number"
+              step="0.001"
+              defaultValue={v.interest_rate ?? ""}
+              className={`tabular ${input}`}
+            />
+          </Field>
+          <Field label="Fecha de inicio">
+            <input name="start_date" type="date" defaultValue={v.start_date ?? ""} className={input} />
+          </Field>
+          <Field label="Fecha de vencimiento">
+            <input name="maturity_date" type="date" defaultValue={v.maturity_date ?? ""} className={input} />
+          </Field>
+        </>
+      )}
       <Field label="Notas">
         <input name="notes" defaultValue={v.notes ?? ""} placeholder="Opcional" className={input} />
       </Field>
@@ -92,7 +141,22 @@ export function InvestmentFields({ v = {} }: { v?: Values }) {
           <Field label="Proyecto de vivienda">
             <input name="project_name" defaultValue={v.project_name ?? ""} className={input} />
           </Field>
-          <Field label="Valor del crédito">
+          <Field label="Precio de compra (total)">
+            <input
+              name="purchase_price"
+              type="number"
+              step="0.01"
+              defaultValue={v.purchase_price ?? ""}
+              className={`tabular ${input}`}
+            />
+          </Field>
+          <Field label="Fecha de compra">
+            <input name="purchase_date" type="date" defaultValue={v.purchase_date ?? ""} className={input} />
+          </Field>
+          <Field label="Fecha de desembolso del crédito">
+            <input name="start_date" type="date" defaultValue={v.start_date ?? ""} className={input} />
+          </Field>
+          <Field label="Valor del crédito (total)">
             <input
               name="credit_amount"
               type="number"

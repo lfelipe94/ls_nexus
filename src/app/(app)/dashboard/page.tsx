@@ -2,17 +2,17 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { sumByCurrency, paymentsByMonth, groupSum } from "@/lib/aggregations";
-import { categoryLabel, monthlyPayment, nextPaymentDate } from "@/lib/investments";
+import { categoryLabel, currentValue, monthlyPayment, myShare, nextPaymentDate } from "@/lib/investments";
 import { AllocationChart, InvestmentsByCurrencyChart, PaymentsByMonthChart } from "@/components/DashboardCharts";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: investments }, { data: upcomingPayments }, { data: allPayments }] =
+  const [{ data: investments, error }, { data: upcomingPayments }, { data: allPayments }] =
     await Promise.all([
       supabase
         .from("investments")
-        .select("name, amount, currency, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day"),
+        .select("name, amount, currency, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day, ownership_pct, purchase_price, current_value, start_date, maturity_date"),
       supabase
         .from("recurring_payments")
         .select("id, name, amount, currency, due_date")
@@ -21,8 +21,19 @@ export default async function DashboardPage() {
       supabase.from("recurring_payments").select("amount, currency, due_date"),
     ]);
 
-  const investmentTotals = sumByCurrency(investments ?? []);
-  const homes = (investments ?? []).filter((i) => i.category === "vivienda" && i.credit_amount);
+  if (error) throw new Error(error.message);
+
+  // Todo el dashboard usa solo tu parte (ownership_pct) de cada inversión.
+  const mine = (investments ?? []).map(myShare);
+  // Lo financiero (CDT, fondos…) va separado de la vivienda.
+  const financial = mine.filter((i) => i.category !== "vivienda");
+  const investmentTotals = sumByCurrency(financial);
+  const todayTotals = sumByCurrency(financial.map((i) => ({ amount: currentValue(i), currency: i.currency })));
+  const allHomes = mine.filter((i) => i.category === "vivienda");
+  const equityTotals = sumByCurrency(
+    allHomes.map((h) => ({ amount: currentValue(h) - Number(h.credit_amount ?? 0), currency: h.currency }))
+  );
+  const homes = allHomes.filter((i) => i.credit_amount);
   const debtTotals = sumByCurrency(homes.map((h) => ({ amount: h.credit_amount, currency: h.currency })));
   const cuotaTotals = sumByCurrency(
     homes.flatMap((h) => {
@@ -32,8 +43,8 @@ export default async function DashboardPage() {
   );
   // Las monedas no se suman: las gráficas de distribución usan la moneda principal.
   const main = investmentTotals.find((t) => t.currency === "COP")?.currency ?? investmentTotals[0]?.currency;
-  const byCategory = main ? groupSum(investments ?? [], main, (i) => categoryLabel(i.category)) : [];
-  const byPlatform = main ? groupSum(investments ?? [], main, (i) => i.platform || "Sin plataforma") : [];
+  const byCategory = main ? groupSum(financial, main, (i) => categoryLabel(i.category)) : [];
+  const byPlatform = main ? groupSum(financial, main, (i) => i.platform || "Sin plataforma") : [];
   const { data: monthlyData, currencies } = paymentsByMonth(allPayments ?? []);
 
   return (
@@ -55,6 +66,18 @@ export default async function DashboardPage() {
               Invertido en {currency}
             </p>
             <p className="tabular mt-2 text-3xl font-semibold">{formatMoney(total, currency)}</p>
+            <p className="tabular mt-1 text-xs text-white/70">
+              Hoy ≈ {formatMoney(todayTotals.find((t) => t.currency === currency)?.total ?? total, currency)}
+            </p>
+          </div>
+        ))}
+        {equityTotals.map(({ currency, total }) => (
+          <div key={`e${currency}`} className="card p-6">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">
+              Patrimonio en vivienda ({currency})
+            </p>
+            <p className="tabular mt-2 text-3xl font-semibold text-ink">{formatMoney(total, currency)}</p>
+            <p className="text-xs text-ink-soft">Valor de mi parte menos mi deuda</p>
           </div>
         ))}
         {debtTotals.map(({ currency, total }) => (

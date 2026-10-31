@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LS Nexus · Arquitectura</title>
+<style>
+  :root{--bg:#f6f6fb;--card:#fff;--ink:#1d1f3a;--soft:#6b6f8d;--line:#e2e3f0;--ind:#6366f1;--ind-soft:#eef0ff;--vio:#8b5cf6;--teal:#14b8a6;--amb:#f59e0b;--pink:#ec4899;--code:#f0f1fa}
+  @media (prefers-color-scheme:dark){:root{--bg:#12131f;--card:#1b1d2e;--ink:#e8e9f7;--soft:#9a9dbd;--line:#2c2f47;--ind-soft:#25274a;--code:#242640}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+  main{max-width:1040px;margin:0 auto;padding:32px 16px 80px}
+  h1{font-size:32px;margin:0 0 4px;letter-spacing:-.02em}
+  h2{font-size:22px;margin:56px 0 6px;letter-spacing:-.01em}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:6px 0}
+  .sub{color:var(--soft)}
+  nav{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0}
+  nav a{padding:6px 14px;border-radius:99px;background:var(--card);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:13px}
+  nav a:hover{background:var(--ind-soft)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  code{background:var(--code);padding:1px 6px;border-radius:6px;font:13px ui-monospace,Consolas,monospace}
+  pre{background:var(--code);padding:14px;border-radius:12px;overflow-x:auto;font:13px/1.55 ui-monospace,Consolas,monospace;margin:10px 0}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;background:var(--ind-soft);color:var(--ind)}
+  .tag.t{background:#14b8a622;color:var(--teal)}.tag.a{background:#f59e0b22;color:var(--amb)}.tag.p{background:#ec489922;color:var(--pink)}
+  svg{width:100%;height:auto;display:block}
+  svg text{fill:var(--ink);font-family:system-ui,sans-serif}
+  .box{fill:var(--card);stroke:var(--line);stroke-width:1.5}
+  .arrow{stroke:var(--soft);stroke-width:2;fill:none}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .note{border-left:4px solid var(--amb);background:#f59e0b14;padding:10px 14px;border-radius:0 12px 12px 0;margin:10px 0}
+  ol.steps{padding-left:20px}ol.steps li{margin:6px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>LS Nexus · Cómo funciona todo</h1>
+  <p class="sub">Tu app de finanzas personales: inversiones, créditos de vivienda, pagos e ingresos/gastos. Explicado paso a paso, tal como está el código hoy.</p>
+  <nav>
+    <a href="#repo">0. El repo</a><a href="#general">1. Visión general</a><a href="#supabase">2. Supabase</a><a href="#paginas">3. Páginas</a>
+    <a href="#er">4. Base de datos (ER)</a><a href="#tablas">5. Qué es cada tabla</a><a href="#calculos">6. Tarjetas y cálculos</a>
+    <a href="#graficas">7. Gráficas</a><a href="#notas">8. Cosas a vigilar</a><a href="#seguridad">9. Seguridad</a>
+  </nav>
+
+  <!-- 0 -->
+  <h2 id="repo">0. Cómo está organizado el repo</h2>
+  <p class="sub">Un "repo" es la carpeta del proyecto (<code>ls_nexus</code>) con todo su código, controlada por git. Esto es lo que hay dentro y para qué sirve cada cosa.</p>
+
+  <div class="card">
+<pre>ls_nexus/
+├── src/                  ← TU CÓDIGO (aquí se trabaja casi siempre)
+│   ├── middleware.ts         el portero: corre antes de cada página
+│   ├── app/                  las PÁGINAS (cada carpeta = una URL)
+│   │   ├── layout.tsx            envoltorio de toda la web (fuente, fondo)
+│   │   ├── globals.css           colores y estilos (tema índigo/lavanda)
+│   │   ├── page.tsx              landing pública  →  /
+│   │   ├── login/  signup/       entrar y crear cuenta
+│   │   └── (app)/                zona privada (solo con sesión)
+│   │       ├── layout.tsx            barra lateral + correo + cerrar sesión
+│   │       ├── dashboard/            /dashboard   (Resumen)
+│   │       ├── inversiones/          /inversiones, /[id], /[id]/editar, /export
+│   │       ├── pagos/                /pagos, /[id], /export
+│   │       └── ingresos/             /ingresos
+│   ├── components/           PIEZAS REUTILIZABLES de pantalla
+│   │   ├── DashboardCharts.tsx   las 3 gráficas (dona, dona, área)
+│   │   ├── InvestmentFields.tsx  campos del formulario de inversión
+│   │   └── ConfirmDeleteButton.tsx  botón "¿seguro que quieres borrar?"
+│   └── lib/                  LÓGICA SIN PANTALLA (cálculos y utilidades)
+│       ├── investments.ts        cuota, valor hoy, saldo, myShare…
+│       ├── aggregations.ts       sumas por moneda / mes / plataforma
+│       ├── format.ts             1234 → "$ 1.234,00"
+│       ├── csv.ts                arma los archivos CSV a descargar
+│       └── supabase/             los 3 clientes de Supabase
+├── supabase/             ← BASE DE DATOS (solo guardado como SQL)
+│   ├── schema.sql            esquema inicial
+│   └── migrations/           001…005: cambios que corres a mano
+├── docs/arquitectura.html    esta página
+├── public/               imágenes estáticas (casi sin uso)
+├── .agents/skills/       guías de diseño para el asistente de IA
+├── package.json          lista de librerías y comandos
+├── .env.local            tus llaves de Supabase (secreto, no se sube a git)
+└── *.md                  notas: README, genova-credito, conversación inicial</pre>
+  </div>
+
+  <h3 style="margin:22px 0 8px">La regla para no perderte</h3>
+  <div class="grid g3">
+    <div class="card"><span class="tag">app/</span><h3 style="margin-top:8px">"¿Qué se ve?"</h3><p class="sub">Cada carpeta con un <code>page.tsx</code> es una URL. Ej: <code>app/(app)/pagos/page.tsx</code> → <code>/pagos</code>. Los paréntesis <code>(app)</code> solo agrupan; no aparecen en la URL. Los corchetes <code>[id]</code> son una parte variable (<code>/inversiones/abc123</code>).</p></div>
+    <div class="card"><span class="tag t">actions.ts</span><h3 style="margin-top:8px">"¿Qué se guarda?"</h3><p class="sub">Junto a cada página hay un <code>actions.ts</code> con las funciones que escriben en la base: crear, editar, borrar. Son las que llaman los botones de los formularios.</p></div>
+    <div class="card"><span class="tag a">lib/</span><h3 style="margin-top:8px">"¿Cómo se calcula?"</h3><p class="sub">Aquí viven las matemáticas, separadas de la pantalla. Si un número del dashboard está mal, casi seguro el culpable está en <code>investments.ts</code> o <code>aggregations.ts</code>.</p></div>
+  </div>
+
+  <h3 style="margin:22px 0 8px">Qué hace cada archivo clave</h3>
+  <div class="card" style="overflow-x:auto">
+    <table>
+      <tr><th>Archivo</th><th>En una frase</th></tr>
+      <tr><td><code>page.tsx</code></td><td>La pantalla. Pide datos a Supabase y los pinta.</td></tr>
+      <tr><td><code>layout.tsx</code></td><td>Marco que envuelve páginas. El de <code>(app)</code> pone la barra lateral en todas las páginas privadas; el de la raíz carga fuente y fondo.</td></tr>
+      <tr><td><code>actions.ts</code></td><td>Funciones que corren en el servidor y modifican datos (<code>"use server"</code>).</td></tr>
+      <tr><td><code>export/route.ts</code></td><td>No es una pantalla: devuelve un archivo CSV al visitar <code>/pagos/export</code> o <code>/inversiones/export</code>.</td></tr>
+      <tr><td><code>middleware.ts</code></td><td>Revisa la sesión antes de mostrar nada y redirige a login si hace falta.</td></tr>
+      <tr><td><code>globals.css</code></td><td>Paleta de colores y la clase <code>.card</code> que usan todas las tarjetas.</td></tr>
+      <tr><td><code>migrations/00X_*.sql</code></td><td>Cambios de la base. <b>No se aplican solos</b>: los pegas tú en Supabase → SQL Editor, en orden.</td></tr>
+      <tr><td><code>package.json</code></td><td>Librerías: Next.js, React, Supabase, Recharts (gráficas), Tailwind (estilos), lucide (iconos). Comandos: <code>npm run dev</code> arranca la app.</td></tr>
+      <tr><td><code>.env.local</code></td><td>URL y llave de tu proyecto Supabase. Sin esto la app no conecta. <code>.env.local.example</code> es la plantilla.</td></tr>
+    </table>
+  </div>
+
+  <h3 style="margin:22px 0 8px">Carpetas que ignoras (se generan solas)</h3>
+  <div class="card">
+    <p><code>node_modules/</code> = librerías descargadas (enorme, no se toca). <code>.next/</code> = la app compilada mientras corre <code>npm run dev</code>. <code>.git/</code> = el historial de cambios. <code>tsconfig*.json</code>, <code>eslint.config.mjs</code>, <code>next.config.ts</code> = configuración de TypeScript, revisor de código y Next.js.</p>
+    <p class="sub"><code>AGENTS.md</code> lo escribe Next.js: avisa al asistente de IA que esta versión de Next.js tiene diferencias y debe leer su documentación local.</p>
+  </div>
+
+  <h3 style="margin:22px 0 8px">Cómo viaja un clic por el repo</h3>
+  <div class="card">
+    <p>Ejemplo: abres <code>/pagos</code> y agregas un pago.</p>
+    <ol class="steps">
+      <li><code>middleware.ts</code> confirma que hay sesión.</li>
+      <li><code>(app)/layout.tsx</code> dibuja la barra lateral.</li>
+      <li><code>pagos/page.tsx</code> pide los pagos a Supabase (con <code>lib/supabase/server.ts</code>) y usa <code>lib/format.ts</code> para mostrar los montos.</li>
+      <li>Envías el formulario → <code>pagos/actions.ts</code> guarda la fila en <code>recurring_payments</code>.</li>
+      <li>La página se refresca sola con el pago nuevo.</li>
+    </ol>
+  </div>
+
+  <h3 style="margin:22px 0 8px">Cómo el repo se une a la base de datos</h3>
+  <div class="note">El código (<code>src/</code>) y la base (<code>supabase/</code>) viven en <b>lugares distintos</b>: el código corre en tu PC y la base en la nube de Supabase. La carpeta <code>supabase/</code> del repo solo guarda los SQL como recibo. Si cambias el código para usar una columna nueva, tienes que correr también su migración en Supabase, o la app falla.</div>
+  <p class="sub">Estado de git hoy: rama <code>main</code>; las migraciones 003–005 y la página de detalle de inversiones aún no están guardadas en un commit.</p>
+
+  <!-- 1 -->
+  <h2 id="general">1. Visión general</h2>
+  <p class="sub">Tres piezas: el navegador (lo que ves), Next.js (la app) y Supabase (login + base de datos). Hoy corre en tu PC (<code>localhost:3000</code>); Vercel aún no está configurado.</p>
+  <div class="card">
+    <svg viewBox="0 0 980 330" role="img" aria-label="Diagrama de arquitectura general">
+      <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--soft)"/></marker></defs>
+      <!-- browser -->
+      <rect class="box" x="10" y="60" width="190" height="210" rx="16"/>
+      <text x="105" y="90" text-anchor="middle" font-weight="700" font-size="16">Navegador</text>
+      <text x="105" y="115" text-anchor="middle" font-size="12" fill="var(--soft)">Tú, en la web</text>
+      <text x="105" y="150" text-anchor="middle" font-size="13">Formularios</text>
+      <text x="105" y="172" text-anchor="middle" font-size="13">Tarjetas y tablas</text>
+      <text x="105" y="194" text-anchor="middle" font-size="13">Gráficas (Recharts)</text>
+      <text x="105" y="230" text-anchor="middle" font-size="12" fill="var(--soft)">Guarda la cookie</text>
+      <text x="105" y="248" text-anchor="middle" font-size="12" fill="var(--soft)">de sesión</text>
+      <!-- next -->
+      <rect x="300" y="10" width="380" height="310" rx="18" fill="var(--ind-soft)" stroke="var(--ind)" stroke-width="2"/>
+      <text x="490" y="38" text-anchor="middle" font-weight="700" font-size="16">Next.js (tu app)</text>
+      <rect class="box" x="320" y="55" width="340" height="52" rx="12"/>
+      <text x="490" y="77" text-anchor="middle" font-weight="600" font-size="14">Middleware (el portero)</text>
+      <text x="490" y="95" text-anchor="middle" font-size="12" fill="var(--soft)">¿Hay sesión? Si no → /login</text>
+      <rect class="box" x="320" y="120" width="340" height="88" rx="12"/>
+      <text x="490" y="142" text-anchor="middle" font-weight="600" font-size="14">Páginas (Server Components)</text>
+      <text x="490" y="162" text-anchor="middle" font-size="12" fill="var(--soft)">Resumen · Inversiones · Pagos · Ingresos</text>
+      <text x="490" y="180" text-anchor="middle" font-size="12" fill="var(--soft)">Piden datos a Supabase y hacen los cálculos</text>
+      <text x="490" y="198" text-anchor="middle" font-size="12" fill="var(--soft)">en el servidor (src/lib/*.ts)</text>
+      <rect class="box" x="320" y="222" width="340" height="86" rx="12"/>
+      <text x="490" y="244" text-anchor="middle" font-weight="600" font-size="14">Server Actions + rutas /export</text>
+      <text x="490" y="264" text-anchor="middle" font-size="12" fill="var(--soft)">Crear, editar, borrar (actions.ts)</text>
+      <text x="490" y="282" text-anchor="middle" font-size="12" fill="var(--soft)">Descargar CSV (export/route.ts)</text>
+      <text x="490" y="298" text-anchor="middle" font-size="12" fill="var(--soft)">Login / registro</text>
+      <!-- supabase -->
+      <rect class="box" x="780" y="60" width="190" height="210" rx="16" style="stroke:var(--teal);stroke-width:2"/>
+      <text x="875" y="90" text-anchor="middle" font-weight="700" font-size="16">Supabase</text>
+      <text x="875" y="115" text-anchor="middle" font-size="12" fill="var(--soft)">En la nube</text>
+      <text x="875" y="150" text-anchor="middle" font-size="13">Auth (usuarios)</text>
+      <text x="875" y="172" text-anchor="middle" font-size="13">Postgres (tablas)</text>
+      <text x="875" y="194" text-anchor="middle" font-size="13">RLS (privacidad)</text>
+      <text x="875" y="230" text-anchor="middle" font-size="12" fill="var(--soft)">Solo tú ves</text>
+      <text x="875" y="248" text-anchor="middle" font-size="12" fill="var(--soft)">tus datos</text>
+      <!-- arrows -->
+      <path class="arrow" d="M200 130 H300" marker-end="url(#ah)"/>
+      <path class="arrow" d="M300 200 H200" marker-end="url(#ah)"/>
+      <text x="250" y="122" text-anchor="middle" font-size="11" fill="var(--soft)">petición</text>
+      <text x="250" y="218" text-anchor="middle" font-size="11" fill="var(--soft)">HTML</text>
+      <path class="arrow" d="M680 130 H780" marker-end="url(#ah)"/>
+      <path class="arrow" d="M780 200 H680" marker-end="url(#ah)"/>
+      <text x="730" y="122" text-anchor="middle" font-size="11" fill="var(--soft)">consulta</text>
+      <text x="730" y="218" text-anchor="middle" font-size="11" fill="var(--soft)">datos</text>
+    </svg>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><span class="tag">Next.js</span><h3 style="margin-top:8px">Frontend + backend en uno</h3><p class="sub">Las páginas se arman en el servidor, ya con los datos. Por eso no hay una API aparte: cada página llama directo a Supabase.</p></div>
+    <div class="card"><span class="tag t">Supabase</span><h3 style="margin-top:8px">Tu base de datos y tu login</h3><p class="sub">Guarda usuarios y tablas. No programaste un servidor de base de datos: Supabase te lo da hecho.</p></div>
+    <div class="card"><span class="tag a">Vercel</span><h3 style="margin-top:8px">Pendiente</h3><p class="sub">Es donde se publicaría la app para abrirla desde cualquier lado. Hoy solo funciona en tu computador.</p></div>
+  </div>
+
+  <h3 style="margin:22px 0 8px">¿Frontend y backend juntos? ¿Y los endpoints?</h3>
+  <p class="sub">Sí: en Next.js es <b>un solo proyecto</b> y se despliega en un solo sitio. A diferencia de React + Node/Express, no tienes dos carpetas ni dos servidores. Pero el código sigue dividido en dos mundos.</p>
+  <div class="grid g2">
+    <div class="card">
+      <span class="tag">Servidor (Node)</span>
+      <p class="sub" style="margin-top:8px"><code>page.tsx</code>, <code>layout.tsx</code>, <code>actions.ts</code>, <code>route.ts</code>, <code>middleware.ts</code>, <code>lib/</code>. Aquí están las llaves (<code>.env.local</code>) y los cálculos. Nada de esto llega al navegador.</p>
+    </div>
+    <div class="card">
+      <span class="tag a">Navegador</span>
+      <p class="sub" style="margin-top:8px">Solo lo que lleva <code>"use client"</code>: <code>DashboardCharts.tsx</code> (Recharts dibuja en pantalla) y <code>ConfirmDeleteButton.tsx</code> (necesita el clic).</p>
+    </div>
+  </div>
+  <div class="card" style="overflow-x:auto;margin-top:14px">
+    <table>
+      <tr><th></th><th>React + Node (clásico)</th><th>Next.js (tu app)</th></tr>
+      <tr><td><b>Proyectos</b></td><td>2 (React y Node/Express)</td><td>1</td></tr>
+      <tr><td><b>Leer datos</b></td><td>El navegador hace <code>fetch("/api/pagos")</code>, Node consulta y responde JSON</td><td>La página corre en el servidor y consulta Supabase directo; el navegador recibe HTML ya armado</td></tr>
+      <tr><td><b>Guardar datos</b></td><td>Endpoint POST/PUT/DELETE que programas</td><td>Una función en <code>actions.ts</code> que el formulario llama</td></tr>
+      <tr><td><b>Despliegue</b></td><td>2 sitios</td><td>1 (Vercel)</td></tr>
+    </table>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>¿Tengo que crear endpoints para hablar con la base de datos? No.</h3>
+    <p class="sub">Esta línea ya es una petición HTTP a la API que Supabase genera sola para cada tabla. Ese endpoint existe, pero no lo escribiste tú:</p>
+    <pre>supabase.from("investments").select("*")</pre>
+    <table>
+      <tr><th>Necesidad</th><th>Qué usas</th></tr>
+      <tr><td>Leer datos</td><td>Directo en <code>page.tsx</code></td></tr>
+      <tr><td>Crear / editar / borrar</td><td><code>actions.ts</code> (<code>"use server"</code>). Next.js crea solo el canal navegador ↔ servidor.</td></tr>
+      <tr><td>Devolver un archivo</td><td><code>route.ts</code>: un endpoint clásico. Tienes 2: <code>/pagos/export</code> y <code>/inversiones/export</code>.</td></tr>
+    </table>
+    <p class="sub" style="margin-top:10px"><b>Cuándo sí harías más <code>route.ts</code>:</b> webhooks (avisos de un banco o Stripe), una app móvil o script externo que consuma tus datos, tareas programadas (recordatorio diario de vencimientos), o llamar a una API externa sin exponer su llave (p. ej. tasa de cambio). Hoy ninguno aplica salvo el CSV.</p>
+    <p class="sub"><b>Ojo:</b> Next.js no hace todo solo. Los cálculos de <code>lib/</code> y las validaciones de <code>actions.ts</code> siguen siendo tuyos. Y como no hay API propia, la protección de los datos recae en el RLS (ver sección 9).</p>
+  </div>
+
+  <!-- 2 -->
+  <h2 id="supabase">2. Cómo funciona Supabase aquí</h2>
+  <p class="sub">Supabase hace dos trabajos: <b>saber quién eres</b> (Auth) y <b>guardar tus datos de forma privada</b> (Postgres + RLS).</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Login paso a paso</h3>
+      <ol class="steps">
+        <li>Escribes email y contraseña en <code>/login</code> (o <code>/signup</code>).</li>
+        <li>Una Server Action manda esos datos a Supabase Auth.</li>
+        <li>Supabase te devuelve una <b>sesión</b> y se guarda en una <b>cookie</b> del navegador.</li>
+        <li>En cada visita, el <b>middleware</b> lee la cookie y pregunta a Supabase "¿quién es?" (<code>auth.getUser()</code>).</li>
+        <li>Sin sesión en <code>/dashboard</code>, <code>/inversiones</code> o <code>/pagos</code> → te manda a <code>/login</code>. Con sesión en <code>/login</code> → te manda al dashboard.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>RLS: por qué nadie ve tus datos</h3>
+      <p class="sub">RLS = <i>Row Level Security</i>. Es una regla dentro de la base de datos, en cada tabla:</p>
+      <pre>using (auth.uid() = user_id)</pre>
+      <p class="sub">Significa: "solo devuelve las filas cuyo <code>user_id</code> sea el del usuario que pregunta". Aunque alguien tuviera la llave pública, la base de datos le filtra todo lo que no es suyo. Cada fila nueva se guarda con tu <code>user_id</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Los 3 "clientes" de Supabase</h3>
+      <table>
+        <tr><th>Archivo</th><th>Para qué</th></tr>
+        <tr><td><code>lib/supabase/client.ts</code></td><td>Desde el navegador</td></tr>
+        <tr><td><code>lib/supabase/server.ts</code></td><td>Páginas y acciones (el principal). Lee la cookie de sesión.</td></tr>
+        <tr><td><code>lib/supabase/middleware.ts</code></td><td>El portero: revisa sesión y refresca la cookie.</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Variables de entorno</h3>
+      <p class="sub">Dos valores en <code>.env.local</code>:</p>
+      <p><code>NEXT_PUBLIC_SUPABASE_URL</code> → dirección de tu proyecto.<br><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> → llave pública (segura porque RLS protege las filas).</p>
+      <p class="sub">Al subir a Vercel hay que copiarlas allí también.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Ciclo de un dato (ejemplo: agregar una inversión)</h3>
+    <ol class="steps">
+      <li>Llenas el formulario en <code>/inversiones</code> y das "Agregar".</li>
+      <li><code>createInvestment</code> (server action) verifica tu sesión y arma el objeto con <code>parseInvestment</code>, que <b>limpia los campos que no aplican</b> al tipo (p. ej. un CDT no guarda datos de crédito).</li>
+      <li>Hace <code>insert</code> en la tabla <code>investments</code> con tu <code>user_id</code>. Si falla, lanza el error.</li>
+      <li><code>revalidatePath</code> le dice a Next.js que vuelva a pedir los datos y la lista se actualiza sola.</li>
+    </ol>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="paginas">3. Mapa de páginas</h2>
+  <div class="card" style="overflow-x:auto">
+    <table>
+      <tr><th>Ruta</th><th>Qué hace</th><th>Tablas que lee</th></tr>
+      <tr><td><code>/</code></td><td>Landing pública.</td><td>—</td></tr>
+      <tr><td><code>/login</code> · <code>/signup</code></td><td>Entrar / crear cuenta.</td><td>auth.users</td></tr>
+      <tr><td><code>/dashboard</code></td><td>Resumen: tarjetas y 4 gráficas con tu situación completa.</td><td>investments, recurring_payments</td></tr>
+      <tr><td><code>/inversiones</code></td><td>Lista + formulario. Exporta CSV (<code>/inversiones/export</code>).</td><td>investments</td></tr>
+      <tr><td><code>/inversiones/[id]</code></td><td>Detalle: valor hoy, crédito, saldo, arriendo vs cuota.</td><td>investments, cash_flows</td></tr>
+      <tr><td><code>/inversiones/[id]/editar</code></td><td>Editar una inversión.</td><td>investments</td></tr>
+      <tr><td><code>/pagos</code> · <code>/pagos/[id]</code></td><td>Facturas con vencimiento, búsqueda, "marcar pagado" (adelanta 1 mes), CSV.</td><td>recurring_payments</td></tr>
+      <tr><td><code>/ingresos</code></td><td>Ingresos y gastos del mes en EUR/USD/COP, y neto por apartamento.</td><td>cash_flows</td></tr>
+    </table>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="er">4. Diagrama Entidad-Relación</h2>
+  <p class="sub">Hay 3 tablas tuyas, todas colgadas del usuario (<code>auth.users</code>, que maneja Supabase). La línea punteada es un enlace "informal" por texto, no una llave foránea real.</p>
+  <div class="card">
+    <svg viewBox="0 0 1000 650" role="img" aria-label="Diagrama entidad relación">
+      <!-- users -->
+      <rect class="box" x="380" y="14" width="240" height="84" rx="12" style="stroke:var(--teal);stroke-width:2"/>
+      <rect x="380" y="14" width="240" height="28" rx="12" fill="var(--teal)"/><rect x="380" y="30" width="240" height="12" fill="var(--teal)"/>
+      <text x="500" y="33" text-anchor="middle" fill="#fff" style="fill:#fff" font-weight="700" font-size="14">auth.users (Supabase)</text>
+      <text x="394" y="62" font-size="12">🔑 id (uuid)</text><text x="394" y="80" font-size="12" fill="var(--soft)">email, contraseña…</text>
+
+      <!-- investments -->
+      <g font-size="12">
+        <rect class="box" x="10" y="190" width="300" height="400" rx="12" style="stroke:var(--ind);stroke-width:2"/>
+        <rect x="10" y="190" width="300" height="28" rx="12" fill="var(--ind)"/><rect x="10" y="206" width="300" height="12" fill="var(--ind)"/>
+        <text x="160" y="209" text-anchor="middle" style="fill:#fff" font-weight="700" font-size="14">investments</text>
+        <text x="24" y="240">🔑 id <tspan fill="var(--soft)">uuid</tspan></text>
+        <text x="24" y="258">🔗 user_id <tspan fill="var(--soft)">→ auth.users</tspan></text>
+        <text x="24" y="276">name <tspan fill="var(--soft)">text</tspan></text>
+        <text x="24" y="294">amount <tspan fill="var(--soft)">numeric (aportado, total)</tspan></text>
+        <text x="24" y="312">currency <tspan fill="var(--soft)">COP | USD | EUR</tspan></text>
+        <text x="24" y="330">category <tspan fill="var(--soft)">vivienda|cdt|fondo|acciones|otro</tspan></text>
+        <text x="24" y="348">platform <tspan fill="var(--soft)">Tyba, Nu, Trii…</tspan></text>
+        <text x="24" y="366">ownership_pct <tspan fill="var(--soft)">1–100 (tu parte)</tspan></text>
+        <text x="24" y="384">current_value <tspan fill="var(--soft)">valor de hoy</tspan></text>
+        <text x="24" y="402">purchase_price <tspan fill="var(--soft)">vivienda</tspan></text>
+        <text x="24" y="420">start_date <tspan fill="var(--soft)">CDT inicio / desembolso</tspan></text>
+        <text x="24" y="438">maturity_date <tspan fill="var(--soft)">CDT vencimiento</tspan></text>
+        <text x="24" y="456">project_name <tspan fill="var(--soft)">vivienda</tspan></text>
+        <text x="24" y="474">credit_amount <tspan fill="var(--soft)">vivienda: deuda</tspan></text>
+        <text x="24" y="492">interest_rate <tspan fill="var(--soft)">% E.A.</tspan></text>
+        <text x="24" y="510">credit_term_months <tspan fill="var(--soft)">plazo</tspan></text>
+        <text x="24" y="528">payment_day <tspan fill="var(--soft)">1–31</tspan></text>
+        <text x="24" y="546">notes, created_at, updated_at</text>
+      </g>
+
+      <!-- payments -->
+      <g font-size="12">
+        <rect class="box" x="350" y="190" width="300" height="190" rx="12" style="stroke:var(--amb);stroke-width:2"/>
+        <rect x="350" y="190" width="300" height="28" rx="12" fill="var(--amb)"/><rect x="350" y="206" width="300" height="12" fill="var(--amb)"/>
+        <text x="500" y="209" text-anchor="middle" style="fill:#fff" font-weight="700" font-size="14">recurring_payments</text>
+        <text x="364" y="240">🔑 id <tspan fill="var(--soft)">uuid</tspan></text>
+        <text x="364" y="258">🔗 user_id <tspan fill="var(--soft)">→ auth.users</tspan></text>
+        <text x="364" y="276">name <tspan fill="var(--soft)">Arriendo, Internet…</tspan></text>
+        <text x="364" y="294">amount, currency</text>
+        <text x="364" y="312">due_date <tspan fill="var(--soft)">próximo vencimiento</tspan></text>
+        <text x="364" y="330">category <tspan fill="var(--soft)">texto libre</tspan></text>
+        <text x="364" y="348">notes, created_at, updated_at</text>
+      </g>
+
+      <!-- cash_flows -->
+      <g font-size="12">
+        <rect class="box" x="690" y="190" width="300" height="250" rx="12" style="stroke:var(--pink);stroke-width:2"/>
+        <rect x="690" y="190" width="300" height="28" rx="12" fill="var(--pink)"/><rect x="690" y="206" width="300" height="12" fill="var(--pink)"/>
+        <text x="840" y="209" text-anchor="middle" style="fill:#fff" font-weight="700" font-size="14">cash_flows</text>
+        <text x="704" y="240">🔑 id <tspan fill="var(--soft)">uuid</tspan></text>
+        <text x="704" y="258">🔗 user_id <tspan fill="var(--soft)">→ auth.users</tspan></text>
+        <text x="704" y="276">kind <tspan fill="var(--soft)">income | expense</tspan></text>
+        <text x="704" y="294">name <tspan fill="var(--soft)">Sueldo, Gym…</tspan></text>
+        <text x="704" y="312">amount, currency <tspan fill="var(--soft)">EUR por defecto</tspan></text>
+        <text x="704" y="330">frequency <tspan fill="var(--soft)">monthly | once</tspan></text>
+        <text x="704" y="348">flow_date <tspan fill="var(--soft)">día de cobro / fecha</tspan></text>
+        <text x="704" y="366">category <tspan fill="var(--soft)">Trabajo, Comida…</tspan></text>
+        <text x="704" y="384">🏠 property <tspan fill="var(--soft)">nombre del apto (texto)</tspan></text>
+        <text x="704" y="402">notes, created_at</text>
+      </g>
+
+      <!-- relations 1:N -->
+      <path class="arrow" d="M440 98 V150 H160 V190"/>
+      <path class="arrow" d="M500 98 V190"/>
+      <path class="arrow" d="M560 98 V150 H840 V190"/>
+      <g font-size="12" font-weight="700">
+        <text x="446" y="116">1</text><text x="166" y="182">N</text>
+        <text x="506" y="116">1</text><text x="506" y="182">N</text>
+        <text x="566" y="116">1</text><text x="846" y="182">N</text>
+      </g>
+      <!-- soft link -->
+      <path d="M840 440 V620 H160 V590" fill="none" stroke="var(--pink)" stroke-width="2" stroke-dasharray="7 6"/>
+      <text x="500" y="612" text-anchor="middle" font-size="12" style="fill:var(--pink)">cash_flows.property  ≈  investments.name  (coincidencia por texto, mayúsculas ignoradas)</text>
+      <text x="500" y="636" text-anchor="middle" font-size="12" fill="var(--soft)">así la página de detalle encuentra el arriendo que recibes por cada vivienda</text>
+    </svg>
+  </div>
+  <div class="note"><b>Leyenda:</b> 🔑 llave primaria · 🔗 llave foránea (si borras el usuario, se borran sus filas: <code>on delete cascade</code>) · "1 → N" = un usuario tiene muchas filas.</div>
+
+  <!-- 5 -->
+  <h2 id="tablas">5. Qué es cada tabla y cómo funciona</h2>
+  <div class="grid g3">
+    <div class="card">
+      <span class="tag">investments</span>
+      <h3 style="margin-top:8px">Tu dinero puesto a trabajar</h3>
+      <p class="sub">Una fila por inversión. El campo <code>category</code> decide qué datos importan:</p>
+      <p><b>CDT</b>: monto, tasa, inicio y vencimiento.<br><b>Vivienda</b>: precio de compra, valor actual, crédito (monto, tasa, plazo, día de pago).<br><b>Fondo / acciones / otro</b>: monto y valor actual.</p>
+      <p class="sub"><code>ownership_pct</code> (p. ej. 50) es tu parte si es con un socio; todos los totales usan solo tu parte.</p>
+    </div>
+    <div class="card">
+      <span class="tag a">recurring_payments</span>
+      <h3 style="margin-top:8px">Facturas con fecha</h3>
+      <p class="sub">Arriendo, servicios, cuotas. Cada una tiene <code>due_date</code>. Si vence en ≤5 días se marca como urgente. El botón ✓ "pagado" mueve la fecha un mes adelante, así la fila se reutiliza cada mes.</p>
+    </div>
+    <div class="card">
+      <span class="tag p">cash_flows</span>
+      <h3 style="margin-top:8px">Lo que entra y sale cada mes</h3>
+      <p class="sub"><code>kind</code> = ingreso o gasto. <code>frequency</code>: <i>monthly</i> cuenta siempre; <i>once</i> solo si su fecha cae en el mes actual. Con <code>property</code> puedes ver el neto por apartamento.</p>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:12px">Moneda: las tres tablas usan el tipo <code>currency_code</code> (COP, USD, EUR). Las migraciones 001–005 en <code>supabase/migrations/</code> son el historial de cambios que fuiste corriendo en el SQL Editor.</p>
+
+  <!-- 6 -->
+  <h2 id="calculos">6. Tarjetas y cálculos</h2>
+  <p class="sub">Regla de oro: <b>las monedas nunca se suman entre sí</b> (no hay conversión EUR↔USD↔COP). Cada moneda tiene su propia tarjeta. Antes de todo, <code>myShare()</code> multiplica monto, valor, precio y crédito por <code>ownership_pct/100</code>.</p>
+
+  <div class="card" style="overflow-x:auto;margin-top:12px">
+    <h3>Dashboard (/dashboard)</h3>
+    <table>
+      <tr><th>Tarjeta</th><th>De dónde sale</th><th>Cálculo</th></tr>
+      <tr><td><b>Invertido en COP/USD/EUR</b><br><span class="sub">(morada)</span></td><td>investments que <u>no</u> son vivienda</td><td>Suma de <code>amount</code> × tu %, por moneda. Debajo, "Hoy ≈" = suma de <code>currentValue()</code> (ver abajo).</td></tr>
+      <tr><td><b>Patrimonio en vivienda</b></td><td>investments con category = vivienda</td><td>Σ (valor hoy de tu parte − tu deuda del crédito)</td></tr>
+      <tr><td><b>Deuda de vivienda</b></td><td>viviendas con <code>credit_amount</code></td><td>Σ <code>credit_amount</code> × tu %. Debajo: "Cuotas ≈ X / mes" = Σ cuota mensual.</td></tr>
+      <tr><td><b>Inversiones registradas</b></td><td>investments</td><td>Cuenta de filas.</td></tr>
+      <tr><td><b>Pagos próximos</b></td><td>recurring_payments</td><td>Cuenta de las 5 más cercanas (<code>limit 5</code>), así que nunca pasa de 5.</td></tr>
+      <tr><td><b>Créditos de vivienda</b> (lista)</td><td>viviendas con crédito</td><td>Monto, cuota estimada, tasa y próxima fecha de pago.</td></tr>
+    </table>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3>Cuota mensual del crédito <code>monthlyPayment</code></h3>
+      <p class="sub">Sistema francés (cuota fija). La tasa es efectiva anual, se pasa a mensual:</p>
+<pre>i     = (1 + tasaEA)^(1/12) − 1
+cuota = P · i / (1 − (1+i)^−n)</pre>
+      <p class="sub">P = monto del crédito, n = plazo en meses. Si la tasa es 0: P / n.</p>
+      <p><b>Ejemplo:</b> 100.000.000 al 12 % E.A., 240 meses → i ≈ 0,949 % → cuota ≈ <b>1.059.000</b>.</p>
+    </div>
+    <div class="card">
+      <h3>Valor de hoy <code>currentValue</code></h3>
+<pre>vivienda → current_value ?? purchase_price ?? amount
+otros    → current_value si lo escribiste
+CDT      → amount · (1 + tasaEA)^(días/365)
+           (días desde start_date; se congela
+            en maturity_date si ya venció)
+sin datos→ amount</pre>
+      <p><b>Ejemplo CDT:</b> 10.000.000 al 12 % E.A. tras 180 días → 10.000.000 · 1,12^(180/365) ≈ <b>10.575.000</b>.</p>
+    </div>
+    <div class="card">
+      <h3>Avance del crédito <code>creditProgress</code></h3>
+<pre>k      = meses desde start_date (máx. plazo)
+saldo  = P·(1+i)^k − cuota·((1+i)^k − 1)/i
+intereses pagados = cuota·k − (P − saldo)</pre>
+      <p class="sub">Dice cuántas cuotas llevas, cuánto debes hoy y cuánto de lo pagado fueron intereses. Es estimado: no incluye seguros ni abonos extra.</p>
+    </div>
+    <div class="card">
+      <h3>Próximo pago <code>nextPaymentDate</code></h3>
+      <p class="sub">Con el <code>payment_day</code> (1–31) busca la primera fecha igual o posterior a hoy; en meses cortos usa el último día del mes (31 → 28 en febrero).</p>
+    </div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;margin-top:14px">
+    <h3>Detalle de una inversión (/inversiones/[id])</h3>
+    <table>
+      <tr><th>Tarjeta</th><th>Cálculo</th></tr>
+      <tr><td>Mi parte del valor hoy</td><td><code>currentValue(mine)</code> — "X % de (valor total)"</td></tr>
+      <tr><td>Patrimonio neto (vivienda)</td><td>mi valor hoy − mi deuda</td></tr>
+      <tr><td>Valorización</td><td>mi valor hoy − mi precio de compra</td></tr>
+      <tr><td>Rendimiento (no vivienda)</td><td>mi valor hoy − mi monto invertido</td></tr>
+      <tr><td>Mi cuota mensual</td><td>cuota total × tu %</td></tr>
+      <tr><td>Intereses de mi parte (todo el plazo)</td><td>(cuota × plazo − crédito) × tu %</td></tr>
+      <tr><td>Saldo de mi deuda hoy</td><td><code>creditProgress().balance</code> × tu %</td></tr>
+      <tr><td><b>Arriendo y bolsillo</b></td><td>Arriendo = suma de ingresos <i>mensuales</i> de cash_flows con <code>property</code> = nombre de la vivienda y misma moneda.<br><b>Sale de mi bolsillo = máx(0, mi cuota − arriendo)</b></td></tr>
+      <tr><td>Días restantes (CDT)</td><td>(vencimiento − hoy) / 86.400.000 ms, redondeado hacia arriba</td></tr>
+    </table>
+  </div>
+
+  <div class="card" style="overflow-x:auto;margin-top:14px">
+    <h3>Ingresos y gastos (/ingresos)</h3>
+    <table>
+      <tr><th>Tarjeta</th><th>Cálculo</th></tr>
+      <tr><td>Filas del mes</td><td>Todas las <i>mensuales</i> + las <i>únicas</i> cuyo <code>flow_date</code> empieza por el mes actual (AAAA-MM).</td></tr>
+      <tr><td>Mes en EUR / USD / COP</td><td>Ingresos = Σ income · Gastos = Σ expense · <b>Me queda = ingresos − gastos</b> · Ahorro % = me queda / ingresos. COP solo aparece si tiene datos.</td></tr>
+      <tr><td>Por apartamento</td><td>Neto = Σ ingresos − Σ gastos de las filas con ese <code>property</code>, por moneda.</td></tr>
+    </table>
+  </div>
+
+  <!-- 7 -->
+  <h2 id="graficas">7. Cómo funcionan las gráficas</h2>
+  <p class="sub">Todas son de <b>Recharts</b> en <code>components/DashboardCharts.tsx</code>. La página (servidor) prepara los datos con <code>lib/aggregations.ts</code> y se los pasa a la gráfica (navegador), que solo dibuja.</p>
+  <div class="grid g3">
+    <div class="card">
+      <span class="tag">Dona</span><h3 style="margin-top:8px">Inversiones por moneda</h3>
+      <p class="sub"><code>sumByCurrency</code> recorre las inversiones financieras y suma <code>amount</code> en un mapa {moneda → total}. Cada porción = una moneda (COP morado, USD ámbar, EUR verde azulado).</p>
+    </div>
+    <div class="card">
+      <span class="tag">Dona</span><h3 style="margin-top:8px">Por tipo · Por plataforma</h3>
+      <p class="sub"><code>groupSum</code> filtra a la <b>moneda principal</b> (COP si existe, si no la primera) y suma por categoría o por plataforma, de mayor a menor. Sin plataforma → "Sin plataforma".</p>
+    </div>
+    <div class="card">
+      <span class="tag">Área</span><h3 style="margin-top:8px">Pagos próximos por mes</h3>
+      <p class="sub"><code>paymentsByMonth</code> crea 6 "cajones" (este mes + 5) y mete cada pago en el cajón de su <code>due_date</code>, sumando por moneda. Pagos fuera de esos 6 meses no se dibujan.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Flujo de datos de una gráfica</h3>
+    <pre>Supabase ──select──▶ dashboard/page.tsx ──▶ myShare() (tu %)
+                                        ──▶ aggregations.ts (suma / agrupa)
+                                        ──props──▶ DashboardCharts.tsx ──▶ SVG en pantalla</pre>
+  </div>
+
+  <!-- 8 -->
+  <h2 id="notas">8. Cosas a vigilar (honestas)</h2>
+  <div class="card">
+    <ul style="margin:0;padding-left:20px">
+      <li><b>Dashboard vacío = error silencioso:</b> si falta una migración (p. ej. 005) o una columna, la consulta de inversiones falla. La página lanza el error en vez de mostrar datos a medias; revisa que 001–005 estén corridas en Supabase.</li>
+      <li><b><code>/ingresos</code> no está en el middleware:</b> la lista de rutas protegidas solo incluye dashboard, inversiones y pagos. Los datos siguen protegidos por RLS (sin sesión no devuelve filas), pero conviene agregarla para que redirija a login.</li>
+      <li><b>cash_flows no tiene política de update:</b> hoy solo se puede crear y borrar, no editar.</li>
+      <li><b>Sin conversión de monedas:</b> no existe un "patrimonio total" único; cada moneda va aparte a propósito.</li>
+      <li><b>Arriendo ↔ vivienda por texto:</b> si el nombre del apartamento en Ingresos no es idéntico al nombre de la inversión, el arriendo sale en 0.</li>
+      <li><b>Cuotas y saldos son estimados:</b> sin seguros, comisiones ni abonos extra.</li>
+      <li><code>supabase/schema.sql</code> solo trae <code>investments</code> y <code>recurring_payments</code> originales; <code>cash_flows</code> y las columnas nuevas viven en las migraciones.</li>
+    </ul>
+  </div>
+
+  <!-- 9 -->
+  <h2 id="seguridad">9. Seguridad: qué protege tus datos</h2>
+  <p class="sub">Como no hay una API propia con reglas, <b>la protección real es el RLS de Supabase</b> más la sesión. Lo demás ayuda, pero no es el candado.</p>
+
+  <div class="card" style="overflow-x:auto">
+    <h3>Las capas, de la más débil a la que de verdad protege</h3>
+    <table>
+      <tr><th>Capa</th><th>Dónde</th><th>Qué hace</th><th>¿Es seguridad real?</th></tr>
+      <tr><td>1. Middleware</td><td><code>middleware.ts</code></td><td>Manda a <code>/login</code> si no hay sesión</td><td><span class="tag a">Comodidad</span> Solo redirige; no impide que se pidan datos.</td></tr>
+      <tr><td>2. Sesión</td><td><code>auth.getUser()</code></td><td>Pregunta a Supabase quién eres (valida la cookie, no se fía de ella)</td><td><span class="tag">Identidad</span> Sin sesión no hay usuario.</td></tr>
+      <tr><td>3. user_id desde el servidor</td><td><code>actions.ts</code></td><td>Al crear, el <code>user_id</code> lo pone el servidor, no el formulario</td><td><span class="tag">Buena práctica</span> El usuario no puede elegir "ser" otro.</td></tr>
+      <tr><td>4. <b>RLS</b></td><td>Base de datos</td><td><code>auth.uid() = user_id</code> en cada consulta</td><td><span class="tag t">El candado real</span> Aunque el código falle, la base filtra.</td></tr>
+      <tr><td>5. Restricciones</td><td>SQL (<code>check</code>, enum)</td><td>Moneda solo COP/USD/EUR, % entre 0 y 100, categorías válidas</td><td><span class="tag">Datos limpios</span></td></tr>
+    </table>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3>Qué es público y por qué no importa</h3>
+      <p class="sub">La URL de Supabase y la <code>ANON_KEY</code> viajan al navegador (por eso empiezan con <code>NEXT_PUBLIC_</code>). Cualquiera puede verlas. Es seguro <b>solo porque RLS está activo</b>: con esa llave, la base devuelve únicamente las filas del usuario con sesión.</p>
+      <p class="sub">La llave peligrosa sería la <code>service_role</code>: se salta el RLS. En el repo <b>no se usa</b> (la busqué) y nunca debe llevar el prefijo <code>NEXT_PUBLIC_</code> ni subirse a git.</p>
+    </div>
+    <div class="card">
+      <h3>Ejemplo: alguien intenta borrar lo tuyo</h3>
+      <ol class="steps">
+        <li>Un usuario malicioso con su propia cuenta llama a <code>deletePayment</code> con el <code>id</code> de un pago tuyo.</li>
+        <li>El servidor ejecuta <code>delete … where id = …</code> con la sesión de <b>él</b>.</li>
+        <li>RLS agrega por dentro <code>and user_id = su_id</code>. Ninguna fila coincide.</li>
+        <li>Resultado: se borran 0 filas. Tu dato sigue ahí.</li>
+      </ol>
+      <p class="sub">Las Server Actions son endpoints públicos aunque no los hayas escrito: cualquiera con sesión puede llamarlos con los datos que quiera. Por eso la defensa no puede estar en el formulario.</p>
+    </div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;margin-top:14px">
+    <h3>Estado actual de las políticas RLS (según el SQL del repo)</h3>
+    <table>
+      <tr><th>Tabla</th><th>Ver</th><th>Crear</th><th>Editar</th><th>Borrar</th></tr>
+      <tr><td><code>investments</code></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td><code>recurring_payments</code></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td><code>cash_flows</code></td><td>✓</td><td>✓</td><td>✗ (no hay política; por eso no se puede editar)</td><td>✓</td></tr>
+    </table>
+    <p class="sub">Una política que falta no es un hueco: sin política, la base <b>niega</b> la operación.</p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Puntos débiles reales, de mayor a menor importancia</h3>
+    <ol class="steps">
+      <li><b>Confirmar que RLS está activo en Supabase.</b> El repo guarda el SQL, pero lo que cuenta es lo que corriste en la nube. Revisa en Supabase → Table Editor que cada tabla diga "RLS enabled", y mira el <i>Security Advisor</i>. Si una tabla estuviera sin RLS, cualquiera con la ANON_KEY leería todo.</li>
+      <li><b>Las políticas de update/delete no se refuerzan en el código.</b> <code>updatePayment</code>, <code>deletePayment</code>, <code>updateInvestment</code> y <code>deleteCashFlow</code> filtran solo por <code>id</code>. Hoy RLS lo cubre; si algún día se desactivara una política, el código no tendría un segundo seguro. Agregar <code>.eq("user_id", user.id)</code> sería una defensa extra barata.</li>
+      <li><b>Casi no hay validación en el servidor.</b> Los <code>actions.ts</code> convierten con <code>Number()</code> y aceptan lo que llegue; la base rechaza lo inválido (enum, <code>check</code>), pero el usuario vería un error crudo. <code>createPayment</code>, <code>updatePayment</code>, <code>deletePayment</code> y <code>markPaymentAsPaid</code> además ignoran los errores sin avisar. No es riesgo de fuga, sí de datos que "no se guardan" sin que lo notes.</li>
+      <li><b><code>/ingresos</code> fuera del middleware.</b> Sin sesión no ve datos (RLS), pero ve la pantalla vacía en vez de ir al login.</li>
+      <li><b>Cuenta y contraseña.</b> La fortaleza de contraseña y la confirmación por correo se configuran en Supabase → Authentication, no en el código. Hoy el registro pide confirmar el correo; conviene tener una contraseña mínima razonable y no abrir el registro si la app es solo para ti.</li>
+      <li><b>Al desplegar en Vercel:</b> copia solo las dos variables públicas; <code>.env.local</code> ya está ignorado por git (verificado) y <code>.env.local.example</code> solo trae marcadores de posición.</li>
+    </ol>
+  </div>
+  <div class="note"><b>Resumen:</b> la arquitectura es segura si RLS está activo y la <code>service_role</code> nunca sale del servidor. Lo primero que haría es el punto 1; es un chequeo de 2 minutos en el panel de Supabase.</div>
+</main>
+</body>
+</html>
