@@ -2,29 +2,30 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { sumByCurrency, paymentsByMonth, groupSum } from "@/lib/aggregations";
-import { categoryLabel, currentValue, monthlyPayment, myShare, nextPaymentDate } from "@/lib/investments";
+import { categoryLabel, creditProgress, currentValue, monthlyPayment, myShare, nextPaymentDate, withMovements, type Movement } from "@/lib/investments";
 import { AllocationChart, InvestmentsByCurrencyChart, PaymentsByMonthChart } from "@/components/DashboardCharts";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: investments, error }, { data: upcomingPayments }, { data: allPayments }] =
+  const [{ data: investments, error }, { data: upcomingPayments }, { data: allPayments }, { data: movements }] =
     await Promise.all([
       supabase
         .from("investments")
-        .select("name, amount, currency, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day, ownership_pct, purchase_price, current_value, start_date, maturity_date"),
+        .select("id, created_at, name, amount, currency, category, platform, project_name, credit_amount, interest_rate, credit_term_months, payment_day, ownership_pct, purchase_price, current_value, start_date, maturity_date"),
       supabase
         .from("recurring_payments")
         .select("id, name, amount, currency, due_date")
         .order("due_date", { ascending: true })
         .limit(5),
-      supabase.from("recurring_payments").select("amount, currency, due_date"),
+      supabase.from("recurring_payments").select("id, name, amount, currency, due_date, category"),
+      supabase.from("investment_movements").select("id, investment_id, kind, movement_date, amount, ea_rate"),
     ]);
 
   if (error) throw new Error(error.message);
 
   // Todo el dashboard usa solo tu parte (ownership_pct) de cada inversión.
-  const mine = (investments ?? []).map(myShare);
+  const mine = (investments ?? []).map((i) => myShare(withMovements(i, (movements ?? []) as Movement[])));
   // Lo financiero (CDT, fondos…) va separado de la vivienda.
   const financial = mine.filter((i) => i.category !== "vivienda");
   const investmentTotals = sumByCurrency(financial);
@@ -46,6 +47,34 @@ export default async function DashboardPage() {
   const byCategory = main ? groupSum(financial, main, (i) => categoryLabel(i.category)) : [];
   const byPlatform = main ? groupSum(financial, main, (i) => i.platform || "Sin plataforma") : [];
   const { data: monthlyData, currencies } = paymentsByMonth(allPayments ?? []);
+
+  // Tabla "Próximos pagos": cuotas de crédito (mi parte) + pagos registrados. Más gastos se suman aquí.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const localDate = (iso: string) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const dueRows = [
+    ...homes.flatMap((h) => {
+      const cuota = monthlyPayment(h);
+      const next = nextPaymentDate(h.payment_day);
+      const progress = creditProgress(h);
+      if (!cuota || !next || (progress && progress.paid >= (h.credit_term_months ?? 0))) return [];
+      return [{ key: `c-${h.id}`, date: next, type: "Cuota crédito", concept: h.platform ? `Crédito ${h.platform}` : "Crédito vivienda", apto: h.name as string | null, amount: cuota, currency: h.currency }];
+    }),
+    ...(allPayments ?? []).map((p) => ({
+      key: `p-${p.id}`,
+      date: localDate(p.due_date),
+      type: p.category || "Pago",
+      concept: p.name,
+      apto: null as string | null,
+      amount: Number(p.amount),
+      currency: p.currency,
+    })),
+  ]
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, 10);
 
   return (
     <div className="space-y-10">
@@ -155,7 +184,7 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {!upcomingPayments || upcomingPayments.length === 0 ? (
+        {dueRows.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-line px-5 py-10 text-center">
             <p className="text-sm text-ink-soft">No tienes pagos registrados todavía.</p>
             <Link
@@ -166,21 +195,42 @@ export default async function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <ul className="card divide-y divide-line overflow-hidden">
-            {upcomingPayments.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-4 px-6 py-4 transition hover:bg-stamp-soft/50">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-ink">{p.name}</p>
-                  <p className="tabular text-sm text-ink-soft">
-                    {new Date(p.due_date).toLocaleDateString("es-CO")}
-                  </p>
-                </div>
-                <span className="tabular shrink-0 text-base font-semibold text-ink">
-                  {formatMoney(Number(p.amount), p.currency)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-soft">
+                  <th className="px-5 py-3 font-medium">Fecha</th>
+                  <th className="px-3 py-3 font-medium">Tipo</th>
+                  <th className="px-3 py-3 font-medium">Concepto</th>
+                  <th className="px-3 py-3 font-medium">Apartamento</th>
+                  <th className="px-5 py-3 text-right font-medium">Monto</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {dueRows.map((r) => {
+                  const days = Math.round((r.date.getTime() - today.getTime()) / 86_400_000);
+                  return (
+                    <tr key={r.key} className="transition hover:bg-stamp-soft/50">
+                      <td className="tabular whitespace-nowrap px-5 py-3.5">
+                        <span className="font-medium text-ink">{r.date.toLocaleDateString("es-CO")}</span>
+                        <span className={`block text-xs ${days < 0 || days <= 5 ? "font-medium text-mustard" : "text-ink-soft"}`}>
+                          {days === 0 ? "hoy" : days > 0 ? `en ${days} días` : `vencido hace ${-days} días`}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="rounded-full bg-stamp-soft px-2 py-0.5 text-xs font-medium text-stamp-dark">{r.type}</span>
+                      </td>
+                      <td className="px-3 py-3.5 text-ink">{r.concept}</td>
+                      <td className="px-3 py-3.5 text-ink-soft">{r.apto ?? "—"}</td>
+                      <td className="tabular whitespace-nowrap px-5 py-3.5 text-right font-semibold text-ink">
+                        {formatMoney(r.amount, r.currency)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

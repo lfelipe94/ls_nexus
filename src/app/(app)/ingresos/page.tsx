@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { CashFlowFields } from "@/components/CashFlowFields";
+import { CURRENCIES } from "@/lib/currencies";
 import { createCashFlow, deleteCashFlow } from "./actions";
-
-const CURRENCIES = ["EUR", "USD", "COP"];
-const CATEGORIES = ["Apartamento", "Trabajo", "Vivienda", "Comida", "Transporte", "Ocio", "Otros"];
-const inputClass =
-  "mt-1.5 w-full rounded border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/50 outline-none transition focus-visible:border-stamp focus-visible:ring-2 focus-visible:ring-stamp/15";
 
 export default async function IngresosPage() {
   const supabase = await createClient();
@@ -90,76 +89,7 @@ export default async function IngresosPage() {
       )}
 
       <form action={createCashFlow} className="grid grid-cols-1 gap-4 card p-6 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium text-ink">Tipo</label>
-          <select name="kind" className={inputClass}>
-            <option value="income">Ingreso</option>
-            <option value="expense">Gasto</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Nombre</label>
-          <input
-            name="name"
-            required
-            placeholder="Ej. Sueldo Trabajo 1, Arriendo, Gym"
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Monto</label>
-          <input name="amount" type="number" step="0.01" required className={`tabular ${inputClass}`} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Moneda</label>
-          <select name="currency" className={inputClass}>
-            {CURRENCIES.map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Frecuencia</label>
-          <select name="frequency" className={inputClass}>
-            <option value="monthly">Mensual</option>
-            <option value="once">Único</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Fecha (día de cobro/pago)</label>
-          <input name="flow_date" type="date" className={inputClass} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Categoría</label>
-          <select name="category" className={inputClass}>
-            <option value="">—</option>
-            {CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-ink">Apartamento</label>
-          <input
-            name="property"
-            list="properties"
-            placeholder="Opcional. Ej. Apto Madrid"
-            className={inputClass}
-          />
-          <datalist id="properties">
-            {properties.map((property) => (
-              <option key={property} value={property} />
-            ))}
-          </datalist>
-        </div>
-        <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-ink">Notas</label>
-          <input name="notes" placeholder="Opcional" className={inputClass} />
-        </div>
+        <CashFlowFields properties={properties} />
         <div className="sm:col-span-2">
           <button
             type="submit"
@@ -204,6 +134,13 @@ export default async function IngresosPage() {
                     <span className="tabular text-base font-semibold text-ink">
                       {formatMoney(Number(flow.amount), flow.currency)}
                     </span>
+                    <Link
+                      href={`/ingresos/${flow.id}/editar`}
+                      aria-label="Editar"
+                      className="rounded p-1.5 text-ink-soft/60 transition hover:bg-stamp-soft hover:text-stamp-dark"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </Link>
                     <form
                       action={async () => {
                         "use server";

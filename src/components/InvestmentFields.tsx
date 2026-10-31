@@ -102,8 +102,24 @@ export function InvestmentFields({ v = {} }: { v?: Values }) {
           className={`tabular ${input}`}
         />
       </Field>
+      {!cdt && !vivienda && (
+        <>
+          <Field label="Fecha de ingreso (primer aporte)">
+            <input name="start_date" type="date" defaultValue={v.start_date ?? ""} className={input} />
+          </Field>
+          <Field label="Tasa E.A. inicial (%) (opcional)">
+            <input
+              name="interest_rate"
+              type="number"
+              step="0.001"
+              defaultValue={v.interest_rate ?? ""}
+              className={`tabular ${input}`}
+            />
+          </Field>
+        </>
+      )}
       {!cdt && (
-        <Field label={vivienda ? "Valor hoy del inmueble (total)" : "Valor actual (opcional)"}>
+        <Field label={vivienda ? "Valor hoy del inmueble (total)" : "Valor actual real (opcional, reemplaza la estimación)"}>
           <input
             name="current_value"
             type="number"

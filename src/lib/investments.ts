@@ -85,6 +85,88 @@ export function currentValue(inv: Valued, today = new Date()) {
   return Number(inv.amount);
 }
 
+export type Movement = {
+  id: string;
+  investment_id: string;
+  kind: "deposit" | "withdrawal" | "rate";
+  movement_date: string;
+  amount: number | string | null;
+  ea_rate: number | string | null;
+  notes?: string | null;
+};
+
+/**
+ * Fondos con aportes, retiros y tasas históricas: `amount` pasa a ser lo aportado neto y, si no
+ * escribiste un valor actual, `current_value` se estima capitalizando cada tramo con la tasa E.A. vigente.
+ * Así dashboard, lista y detalle reutilizan currentValue()/myShare() sin cambios.
+ */
+export function withMovements<
+  T extends { id: string; category: string | null; amount: number | string; current_value?: number | string | null; interest_rate?: number | string | null; start_date?: string | null; created_at?: string },
+>(inv: T, all: Movement[], today = new Date()): T {
+  if (inv.category === "vivienda" || inv.category === "cdt") return inv;
+  const todayStr = today.toISOString().slice(0, 10);
+  const events = all
+    .filter((m) => m.investment_id === inv.id && m.movement_date <= todayStr)
+    .sort((a, b) => a.movement_date.localeCompare(b.movement_date));
+  if (events.length === 0 && inv.interest_rate == null) return inv;
+
+  const start = inv.start_date ?? inv.created_at?.slice(0, 10) ?? events[0]?.movement_date ?? todayStr;
+  const timeline = [
+    { kind: "deposit", movement_date: start, amount: inv.amount, ea_rate: null },
+    ...events,
+  ].sort((a, b) => a.movement_date.localeCompare(b.movement_date));
+
+  // Tasa inicial = la del formulario; si no hay, la primera registrada; sin ninguna no hay rendimiento.
+  let rate = Number(inv.interest_rate ?? events.find((m) => m.kind === "rate")?.ea_rate ?? 0) / 100;
+  let balance = 0;
+  let contributed = 0;
+  let cursor = timeline[0].movement_date;
+  for (const m of timeline) {
+    balance *= Math.pow(1 + rate, daysBetween(cursor, new Date(m.movement_date)) / 365);
+    cursor = m.movement_date;
+    if (m.kind === "rate") rate = Number(m.ea_rate) / 100;
+    else {
+      const sign = m.kind === "deposit" ? 1 : -1;
+      balance += sign * Number(m.amount);
+      contributed += sign * Number(m.amount);
+    }
+  }
+  balance *= Math.pow(1 + rate, daysBetween(cursor, today) / 365);
+  return { ...inv, amount: contributed, current_value: inv.current_value ?? balance };
+}
+
+/**
+ * Tasa E.A. implícita (XIRR): la que hace que los aportes y retiros fechados terminen justo en `value` hoy.
+ * null si hay menos de 30 días (se dispara) o no hay solución.
+ */
+export function impliedRate(
+  inv: { amount: number | string; start_date?: string | null; created_at?: string },
+  all: Movement[],
+  value: number,
+  today = new Date(),
+) {
+  const start = inv.start_date ?? inv.created_at?.slice(0, 10);
+  if (!start) return null;
+  const flows = [
+    { date: start, cf: -Number(inv.amount) },
+    ...all
+      .filter((m) => m.kind !== "rate" && m.movement_date <= today.toISOString().slice(0, 10))
+      .map((m) => ({ date: m.movement_date, cf: (m.kind === "deposit" ? -1 : 1) * Number(m.amount) })),
+    { date: today.toISOString().slice(0, 10), cf: value },
+  ];
+  if (daysBetween(start, today) < 30) return null;
+  const npv = (r: number) => flows.reduce((s, f) => s + f.cf / Math.pow(1 + r, daysBetween(start, new Date(f.date)) / 365), 0);
+  let lo = -0.99;
+  let hi = 10;
+  if (npv(lo) * npv(hi) > 0) return null;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if (npv(lo) * npv(mid) <= 0) hi = mid;
+    else lo = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 /** Tiempo desde la compra y valorización (total y anualizada). null si falta la fecha o el precio de compra. */
 export function appreciation(
   inv: Valued & { purchase_date?: string | null },
