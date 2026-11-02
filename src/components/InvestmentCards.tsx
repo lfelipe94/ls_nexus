@@ -162,6 +162,7 @@ export function HomeCard({
   const next = nextPaymentDate(inv.payment_day, now);
   const repaid = progress && inv.credit_amount ? 1 - progress.balance / Number(inv.credit_amount) : 0;
   const pocket = Math.max(0, cuota - rent);
+  const surplus = Math.max(0, rent - cuota);
 
   return (
     <article className="card space-y-6 p-6">
@@ -216,18 +217,25 @@ export function HomeCard({
         </div>
       )}
 
-      {cuota > 0 && (
+      {(cuota > 0 || rent > 0) && (
         <div className="space-y-1.5">
           <p className="text-sm font-medium text-ink">Arriendo vs cuota</p>
           <Bar
             parts={[
               { value: Math.min(rent, cuota), className: "bg-teal" },
               { value: pocket, className: "bg-mustard" },
+              { value: surplus, className: "bg-teal/50" },
             ]}
           />
           <p className="tabular flex justify-between text-xs text-ink-soft">
-            <span>Arriendo {money(rent)}</span>
-            <span>Sale de mi bolsillo {money(pocket)}</span>
+            <span>
+              Arriendo {money(rent)} · cuota {cuota ? money(cuota) : "pagada"}
+            </span>
+            {pocket > 0 ? (
+              <span>Sale de mi bolsillo {money(pocket)}</span>
+            ) : (
+              <span className="font-medium text-teal">Te sobra {money(surplus)}</span>
+            )}
           </p>
         </div>
       )}

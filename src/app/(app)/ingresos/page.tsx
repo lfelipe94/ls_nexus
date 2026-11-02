@@ -1,164 +1,209 @@
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import { Pencil } from "lucide-react";
-import { formatMoney } from "@/lib/format";
-import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
-import { CashFlowFields } from "@/components/CashFlowFields";
-import { CURRENCIES } from "@/lib/currencies";
-import { createCashFlow, deleteCashFlow } from "./actions";
+import { formatMoney, formatMoneyShort } from "@/lib/format";
+import { CashFlowTable } from "@/components/CashFlowTable";
+import { byCategory, monthTotals, propertyTotals, type CashFlow } from "@/lib/cashflows";
+
+const PALETTE = ["bg-indigo-500", "bg-teal", "bg-amber-500", "bg-pink-500", "bg-sky-500", "bg-violet-500", "bg-slate-400"];
+
+function CategoryPanel({
+  title,
+  subtitle,
+  data,
+  currency,
+}: {
+  title: string;
+  subtitle: string;
+  data: { name: string; value: number }[];
+  currency: string;
+}) {
+  const total = data.reduce((s, c) => s + c.value, 0);
+  return (
+    <div className="card space-y-4 p-6">
+      <div>
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <p className="text-xs text-ink-soft">{subtitle}</p>
+      </div>
+      {data.length === 0 ? (
+        <p className="text-sm text-ink-soft">Nada este mes. Ponle categoría a tus filas para verlo aquí.</p>
+      ) : (
+        <>
+          <div className="flex h-3 overflow-hidden rounded-full">
+            {data.map((c, i) => (
+              <div key={c.name} className={PALETTE[i % PALETTE.length]} style={{ width: `${(c.value / total) * 100}%` }} />
+            ))}
+          </div>
+          <ul className="space-y-2">
+            {data.map((c, i) => (
+              <li key={c.name} className="flex items-center gap-3 text-sm">
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PALETTE[i % PALETTE.length]}`} />
+                <span className="flex-1 truncate text-ink">{c.name}</span>
+                <span className="tabular text-xs text-ink-soft">{Math.round((c.value / total) * 100)} %</span>
+                <span className="tabular w-28 text-right font-medium text-ink">{formatMoney(c.value, currency)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default async function IngresosPage() {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("cash_flows")
-    .select("id, kind, name, amount, currency, notes, frequency, flow_date, category, property")
+    .select("id, kind, name, amount, currency, frequency, flow_date, category, property")
     .order("created_at", { ascending: true });
-  const flows = data ?? [];
-  const properties = [...new Set(flows.map((flow) => flow.property).filter(Boolean))] as string[];
+  if (error) throw new Error(error.message);
 
-  // Cuenta este mes: los mensuales siempre, los únicos solo si caen en el mes actual.
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const monthFlows = flows.filter(
-    (flow) => flow.frequency !== "once" || flow.flow_date?.startsWith(thisMonth),
-  );
+  const flows = (data ?? []) as CashFlow[];
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthName = now.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  const properties = [...new Set(flows.map((f) => f.property).filter(Boolean))] as string[];
 
-  // ponytail: sin conversión EUR↔USD; cada moneda se calcula por separado. Agregar tasa si hace falta un total único.
-  const summaries = CURRENCIES.map((currency) => {
-    const inCurrency = monthFlows.filter((flow) => flow.currency === currency);
-    const sum = (kind: string) =>
-      inCurrency
-        .filter((flow) => flow.kind === kind)
-        .reduce((total, flow) => total + Number(flow.amount), 0);
-    const income = sum("income");
-    const expenses = sum("expense");
-    return { currency, income, expenses, left: income - expenses };
-  }).filter(({ currency, income, expenses }) => currency !== "COP" || income || expenses);
+  // ponytail: sin conversión EUR↔USD↔COP; cada moneda va por separado. Agregar tasa si hace falta un total único.
+  const totals = monthTotals(flows, month);
+  // Moneda principal = la que más gasto tiene (normalmente EUR).
+  const main = [...totals].sort((a, b) => b.expenses - a.expenses)[0]?.currency ?? "EUR";
+  const incomeMain = [...totals].sort((a, b) => b.income - a.income)[0]?.currency ?? main;
+  const incomeCategories = byCategory(flows, month, incomeMain, "income");
+  const expenseCategories = byCategory(flows, month, main, "expense");
+  // Cada apartamento en la moneda de sus propias filas (Génova en COP, el alquiler de aquí en EUR…).
+  const byProperty = propertyTotals(flows, month);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-ink">Ingresos y gastos</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Lo que ganas y gastas al mes, y lo que te queda en cada moneda.
+          Lo que entra y lo que sale en <span className="capitalize">{monthName}</span>. Los mensuales y semanales se repiten solos.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {summaries.map(({ currency, income, expenses, left }) => (
-          <div key={currency} className="card space-y-3 px-6 py-4">
-            <p className="text-xs font-medium uppercase text-ink-soft">Mes en {currency}</p>
-            <p className="tabular text-3xl font-bold tracking-tight text-ink">
-              {formatMoney(left, currency)}
-              <span className="ml-2 text-sm font-normal text-ink-soft">me queda</span>
-            </p>
-            <p className="tabular text-sm text-ink-soft">
-              Ingresos {formatMoney(income, currency)} · Gastos {formatMoney(expenses, currency)}
-              {income > 0 && ` · Ahorro ${Math.round((left / income) * 100)}%`}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {properties.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-ink">Por apartamento (este mes)</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {properties.map((property) => (
-              <div key={property} className="card space-y-1 px-6 py-4">
-                <p className="font-medium text-ink">{property}</p>
-                {CURRENCIES.map((currency) => {
-                  const rows = monthFlows.filter(
-                    (flow) => flow.property === property && flow.currency === currency,
-                  );
-                  if (rows.length === 0) return null;
-                  const net = rows.reduce(
-                    (total, flow) =>
-                      total + (flow.kind === "income" ? 1 : -1) * Number(flow.amount),
-                    0,
-                  );
-                  return (
-                    <p key={currency} className="tabular text-sm text-ink-soft">
-                      Neto {formatMoney(net, currency)}
+      {totals.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-line px-5 py-10 text-center text-sm text-ink-soft">
+          Aún no hay nada este mes. Agrega tus ingresos y gastos en las tablas de abajo o pega una lista.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {totals.map(({ currency, income, expenses, left }) => {
+            const spent = income > 0 ? Math.min(1, expenses / income) : 1;
+            return (
+              <div key={currency} className="card space-y-5 p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Me queda este mes · {currency}</p>
+                    <p className={`tabular mt-1 text-4xl font-bold tracking-tight ${left >= 0 ? "text-ink" : "text-mustard"}`}>
+                      {formatMoney(left, currency)}
                     </p>
-                  );
-                })}
+                  </div>
+                  {income > 0 && (
+                    <span
+                      className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                        left >= 0 ? "bg-teal-soft text-teal" : "bg-mustard-soft text-mustard"
+                      }`}
+                    >
+                      Ahorro {Math.round((left / income) * 100)} %
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <a href="#ingresos" className="rounded-2xl bg-teal-soft/60 px-4 py-3 transition hover:bg-teal-soft">
+                    <p className="flex items-center gap-1 text-xs font-medium text-teal">
+                      <ArrowDownRight className="h-3.5 w-3.5" aria-hidden="true" /> Entra
+                    </p>
+                    <p className="tabular mt-0.5 text-xl font-semibold text-ink">{formatMoney(income, currency)}</p>
+                  </a>
+                  <a href="#gastos" className="rounded-2xl bg-mustard-soft/60 px-4 py-3 transition hover:bg-mustard-soft">
+                    <p className="flex items-center gap-1 text-xs font-medium text-mustard">
+                      <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /> Sale
+                    </p>
+                    <p className="tabular mt-0.5 text-xl font-semibold text-ink">{formatMoney(expenses, currency)}</p>
+                  </a>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex h-3 overflow-hidden rounded-full bg-teal-soft">
+                    <div className="bg-mustard" style={{ width: `${spent * 100}%` }} />
+                  </div>
+                  <p className="tabular text-xs text-ink-soft">
+                    {income > 0 ? `Gastas el ${Math.round((expenses / income) * 100)} % de lo que entra` : "Sin ingresos registrados en esta moneda"}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {totals.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <CategoryPanel
+            title="De dónde entra el dinero"
+            subtitle={`Ingresos de este mes por categoría, en ${incomeMain}`}
+            data={incomeCategories}
+            currency={incomeMain}
+          />
+          <CategoryPanel
+            title="En qué se va el dinero"
+            subtitle={`Gastos de este mes por categoría, en ${main}`}
+            data={expenseCategories}
+            currency={main}
+          />
+        </div>
+      )}
+
+      {byProperty.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Por apartamento</h2>
+            <p className="text-xs text-ink-soft">Lo que entra menos lo que sale de cada inmueble este mes</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {byProperty.map(({ property, totals: t }) => (
+              <div key={property} className="card space-y-3 p-5">
+                <p className="font-semibold text-ink">{property}</p>
+                {t.length === 0 ? (
+                  <p className="text-sm text-ink-soft">Sin movimientos este mes</p>
+                ) : (
+                  t.map(({ currency, income, expenses, left }) => (
+                    <div key={currency} className="space-y-1.5">
+                      <p className={`tabular text-2xl font-bold tracking-tight ${left >= 0 ? "text-teal" : "text-mustard"}`}>
+                        {left >= 0 ? "+" : ""}
+                        {formatMoneyShort(left, currency)}
+                      </p>
+                      <div className="flex gap-2 text-xs">
+                        <span className="tabular rounded-full bg-teal-soft px-2 py-0.5 text-teal">↓ {formatMoneyShort(income, currency)}</span>
+                        <span className="tabular rounded-full bg-mustard-soft px-2 py-0.5 text-mustard">↑ {formatMoneyShort(expenses, currency)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             ))}
           </div>
         </section>
       )}
 
-      <form action={createCashFlow} className="grid grid-cols-1 gap-4 card p-6 sm:grid-cols-2">
-        <CashFlowFields properties={properties} />
-        <div className="sm:col-span-2">
-          <button
-            type="submit"
-            className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/25 transition hover:brightness-110"
-          >
-            Agregar
-          </button>
-        </div>
-      </form>
-
-      {[
-        { kind: "income", title: "Ingresos" },
-        { kind: "expense", title: "Gastos" },
-      ].map(({ kind, title }) => {
-        const rows = flows.filter((flow) => flow.kind === kind);
-        return (
-          <section key={kind} className="space-y-3">
-            <h2 className="text-lg font-semibold text-ink">{title}</h2>
-            {rows.length === 0 ? (
-              <p className="text-sm text-ink-soft">Nada registrado todavía.</p>
-            ) : (
-              <ul className="card divide-y divide-line overflow-hidden">
-                {rows.map((flow) => (
-                  <li key={flow.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-ink">{flow.name}</p>
-                      <p className="text-xs text-ink-soft">
-                        {[
-                          flow.frequency === "once" ? "Único" : "Mensual",
-                          flow.flow_date &&
-                            (flow.frequency === "once"
-                              ? flow.flow_date
-                              : `día ${Number(flow.flow_date.slice(8, 10))}`),
-                          flow.category,
-                          flow.property,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                      {flow.notes && <p className="text-sm text-ink-soft">{flow.notes}</p>}
-                    </div>
-                    <span className="tabular text-base font-semibold text-ink">
-                      {formatMoney(Number(flow.amount), flow.currency)}
-                    </span>
-                    <Link
-                      href={`/ingresos/${flow.id}/editar`}
-                      aria-label="Editar"
-                      className="rounded p-1.5 text-ink-soft/60 transition hover:bg-stamp-soft hover:text-stamp-dark"
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                    </Link>
-                    <form
-                      action={async () => {
-                        "use server";
-                        await deleteCashFlow(flow.id);
-                      }}
-                    >
-                      <ConfirmDeleteButton
-                        label="Eliminar"
-                        confirmMessage={`¿Eliminar "${flow.name}"?`}
-                      />
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        );
-      })}
+      <CashFlowTable
+        kind="income"
+        title="Ingresos"
+        subtitle="Sueldos, arriendos que recibes, otros ingresos."
+        initial={flows.filter((f) => f.kind === "income")}
+        properties={properties}
+        month={month}
+        defaultCurrency={main}
+      />
+      <CashFlowTable
+        kind="expense"
+        title="Gastos"
+        subtitle="Alquiler donde vives, mercado, servicios, seguros… todo lo que sale."
+        initial={flows.filter((f) => f.kind === "expense")}
+        properties={properties}
+        month={month}
+        defaultCurrency={main}
+      />
     </div>
   );
 }

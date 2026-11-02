@@ -72,6 +72,7 @@ export default async function InvestmentDetailPage({
   const cuota = home ? monthlyPayment(inv) : null;
   const next = home ? nextPaymentDate(inv.payment_day) : null;
   const progress = home ? creditProgress(inv) : null;
+  const myCuota = (cuota ?? 0) * (pct / 100);
   const totalPaid = cuota && inv.credit_term_months ? cuota * inv.credit_term_months : null;
 
   return (
@@ -213,17 +214,21 @@ export default async function InvestmentDetailPage({
         </section>
       )}
 
-      {isHome && cuota && (
+      {isHome && (myCuota > 0 || rent > 0) && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-ink">Arriendo y bolsillo</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Stat label="Mi cuota" value={money(cuota * (pct / 100))} />
+            <Stat label="Mi cuota" value={myCuota ? money(myCuota) : "Pagada"} />
             <Stat
               label="Arriendo que recibo"
               value={money(rent)}
               hint={rent ? undefined : `Regístralo en Ingresos con apartamento "${inv.name}"`}
             />
-            <Stat label="Sale de mi bolsillo" value={money(Math.max(0, cuota * (pct / 100) - rent))} />
+            {rent >= myCuota ? (
+              <Stat label="Te sobra" value={money(rent - myCuota)} hint="Arriendo menos tu cuota" />
+            ) : (
+              <Stat label="Sale de mi bolsillo" value={money(myCuota - rent)} />
+            )}
           </div>
         </section>
       )}

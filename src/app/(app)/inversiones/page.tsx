@@ -183,7 +183,7 @@ export default async function InversionesPage({
       ) : (
         <>
           {financial.length > 0 && (
-            <section className="space-y-3">
+            <section id="financieras" className="scroll-mt-6 space-y-3">
               <h2 className="text-lg font-semibold text-ink">Inversiones financieras</h2>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {financial.map((inv) => (
@@ -193,7 +193,7 @@ export default async function InversionesPage({
             </section>
           )}
           {homes.length > 0 && (
-            <section className="space-y-3">
+            <section id="vivienda" className="scroll-mt-6 space-y-3">
               <h2 className="text-lg font-semibold text-ink">Vivienda</h2>
               <div className="grid grid-cols-1 gap-4">
                 {homes.map((inv) => (
